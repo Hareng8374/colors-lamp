@@ -1,0 +1,12 @@
+# Real database credentials. Copy api/config.sample.php to api/config.php.
+config.php
+
+# OS and editor files
+.DS_Store
+__MACOSX/
+*.swp
+.vscode/
+
+# Course assignment instructions (not part of the project)
+ASSIGNMENT.md
+AI Disclosure Template.md
