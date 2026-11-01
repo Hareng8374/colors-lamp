@@ -1,0 +1,60 @@
+@startuml usecase
+title COLORS Web Application - Use Case Diagram
+
+left to right direction
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam usecase {
+  BackgroundColor #F5F9FF
+  BorderColor #2B4C7E
+}
+skinparam note {
+  BackgroundColor #FFFBEA
+  BorderColor #B8A04A
+}
+
+actor "User" as User
+
+rectangle "COLORS Web Application" {
+  usecase "Log In" as Login
+  usecase "Verify Credentials\n(Login.php checks the\nUsers table)" as Verify
+  usecase "Show Login Error\n<i>User/Password combination incorrect</i>" as LoginError
+
+  usecase "Search Colors" as Search
+  usecase "Add Color" as Add
+  usecase "Log Out" as Logout
+
+  note "Partial match on the name (SQL LIKE %search%).\nOnly returns the logged-in user's colors.\nAn empty search returns all of them." as SearchNote
+  note "Saved to the Colors table\nwith the user's ID." as AddNote
+  note "Clears the cookie and goes\nback to index.html." as LogoutNote
+}
+
+User --> Login
+User --> Search
+User --> Add
+User --> Logout
+
+Login ..> Verify : <<include>>
+Login <.. LoginError : <<extend>>\n[login fails]
+
+Search .. SearchNote
+Add .. AddNote
+Logout .. LogoutNote
+
+
+note as Precondition
+  <b>Precondition for Search Colors, Add Color, Log Out:</b>
+  the user is logged in. These are on color.html, and when
+  that page loads, readCookie() looks for userId in the
+  cookie (set at login, lasts 20 minutes). If it's missing,
+  the user is sent back to index.html.
+end note
+
+note as NotSupported
+  <b>Not in the app:</b> Sign Up, Edit Color, Delete Color.
+  Accounts are added directly in MySQL.
+end note
+
+Precondition -[hidden]- NotSupported
+
+@enduml
