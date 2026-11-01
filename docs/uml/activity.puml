@@ -1,0 +1,129 @@
+@startuml activity
+title COLORS Web Application - Activity Diagram
+
+skinparam shadowing false
+skinparam activity {
+  BackgroundColor #F5F9FF
+  BorderColor #2B4C7E
+}
+skinparam note {
+  BackgroundColor #FFFBEA
+  BorderColor #B8A04A
+}
+
+|U| User
+|B| Browser (HTML + code.js)
+|P| PHP API (LAMPAPI)
+|D| MySQL (COP4331)
+
+|U|
+start
+:Open the site (index.html);
+(A)
+
+repeat
+  |U|
+  :Enter username and password;
+  :Click "Do It";
+  |B|
+  :doLogin() sends {login, password} as a POST
+  to LAMPAPI/Login.php;
+  |P|
+  :Login.php connects and runs
+  a prepared SELECT;
+  note right
+    If MySQL can't connect, each endpoint
+    returns the connection error instead
+    of running its query (not drawn).
+  end note
+  |D|
+  :SELECT ID, firstName, lastName FROM Users
+  WHERE Login = ? AND Password = ?;
+  |P|
+  if (Row found?) then (yes)
+    :Return {id, firstName, lastName, error: ""};
+  else (no)
+    :Return {id: 0, ..., error: "No Records Found"};
+  endif
+  |B|
+  backward :Show "User/Password combination incorrect";
+repeat while (id < 1?) is (yes) not (no)
+
+:saveCookie(): firstName, lastName, userId
+(expires in 20 minutes);
+:Go to color.html;
+:readCookie() runs on DOMContentLoaded;
+
+if (userId in cookie?) then (no)
+  :Redirect to index.html;
+  note right
+    Also happens if someone opens
+    color.html without logging in.
+  end note
+  (A)
+  detach
+else (yes)
+endif
+
+|U|
+while (Click "Log Out"?) is (no)
+  if (Which action?) then (Search)
+    :Type part of a color name
+    (blank = all colors);
+    :Click "Search Color";
+    |B|
+    :searchColor() sends {search, userId} as a POST
+    to LAMPAPI/SearchColors.php;
+    |P|
+    :SearchColors.php connects and runs
+    a prepared SELECT;
+    |D|
+    :SELECT Name FROM Colors
+    WHERE Name LIKE %search% AND UserID = ?;
+    |P|
+    if (Any rows?) then (yes)
+      :Return {results: [names], error: ""};
+    else (no)
+      :Return {..., error: "No Records Found"},
+      no results array;
+    endif
+    |B|
+    :Show "Color(s) has been retrieved";
+    if (results array in response?) then (yes)
+      :List the color names in colorList;
+    else (no)
+      :JS error reading results.length,
+      colorList is not updated;
+    endif
+  else (Add)
+    |U|
+    :Type a color name;
+    :Click "Add Color";
+    |B|
+    :addColor() sends {color, userId} as a POST
+    to LAMPAPI/AddColor.php;
+    |P|
+    :AddColor.php connects and runs
+    a prepared INSERT;
+    |D|
+    :INSERT INTO Colors (UserId, Name)
+    VALUES (?, ?);
+    |P|
+    :Return {error: ""};
+    |B|
+    :Show "Color has been added";
+    note right
+      code.js only checks for HTTP 200.
+      It never reads the error field.
+    end note
+  endif
+  |U|
+endwhile (yes)
+
+|B|
+:doLogout(): reset userId, firstName, lastName
+and expire the cookie;
+:Redirect to index.html;
+stop
+
+@enduml
