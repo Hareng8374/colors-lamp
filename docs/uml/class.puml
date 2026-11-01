@@ -1,0 +1,224 @@
+@startuml class
+title COLORS Web Application - Class Diagram
+
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam class {
+  BackgroundColor #F5F9FF
+  BorderColor #2B4C7E
+  StereotypeFontColor #555555
+}
+skinparam note {
+  BackgroundColor #FFFBEA
+  BorderColor #B8A04A
+}
+set separator none
+hide circle
+hide empty members
+
+legend top left
+  COLORS has no OOP classes. Each page, script, PHP file,
+  JSON body, and table is modeled as a class with a stereotype.
+  Dashed arrows are dependencies (loads, calls, reads/writes).
+endlegend
+
+package "Front end (public/)" {
+  class "index.html" as IndexPage <<HTML page>> {
+    loginName: input[text]
+    loginPassword: input[password]
+    {field} loginButton: button [onclick = doLogin()]
+    loginResult: span
+  }
+
+  class "color.html" as ColorPage <<HTML page>> {
+    userName: span
+    {field} logoutButton: button [onclick = doLogout()]
+    searchText: input[text]
+    {field} searchColorButton: button [onclick = searchColor()]
+    colorSearchResult: span
+    colorList: p
+    colorText: input[text]
+    {field} addColorButton: button [onclick = addColor()]
+    colorAddResult: span
+    --
+    on DOMContentLoaded: readCookie()
+  }
+
+  class "code.js" as CodeJS <<JavaScript>> {
+    +urlBase: string = "http://167.99.3.98/LAMPAPI" {readOnly}
+    +extension: string = "php" {readOnly}
+    +userId: int = 0
+    +firstName: string = ""
+    +lastName: string = ""
+    --
+    +doLogin(): void
+    +saveCookie(): void
+    +readCookie(): void
+    +doLogout(): void
+    +addColor(): void
+    +searchColor(): void
+  }
+
+  class "md5.js" as MD5 <<JavaScript library>> {
+    +md5(string, key, raw): string
+  }
+
+  class "Session cookie" as Cookie <<cookie>> {
+    firstName: string
+    lastName: string
+    userId: int
+    expires: date = now + 20 min
+  }
+
+  note bottom of MD5
+    Loaded by index.html only. The md5()
+    call in doLogin() is commented out,
+    so passwords are sent as plain text.
+  end note
+
+  note right of Cookie
+    Written as one cookie string:
+    "firstName=..,lastName=..,userId=.."
+    readCookie() sets userId = -1 first
+    and redirects to index.html if it
+    stays below 0.
+  end note
+}
+
+package "API (LAMPAPI/ on the server, api/ in the repo)" {
+  class "Login.php" as LoginPHP <<PHP endpoint>> {
+    +POST(body: LoginRequest): LoginResponse
+    --
+    -getRequestInfo(): array
+    -sendResultInfoAsJson(obj: string): void
+    -returnWithError(err: string): void
+    -returnWithInfo(firstName, lastName, id): void
+  }
+
+  class "SearchColors.php" as SearchPHP <<PHP endpoint>> {
+    +POST(body: SearchColorsRequest): SearchColorsResponse
+    --
+    -getRequestInfo(): array
+    -sendResultInfoAsJson(obj: string): void
+    -returnWithError(err: string): void
+    -returnWithInfo(searchResults: string): void
+  }
+
+  class "AddColor.php" as AddPHP <<PHP endpoint>> {
+    +POST(body: AddColorRequest): AddColorResponse
+    --
+    -getRequestInfo(): array
+    -sendResultInfoAsJson(obj: string): void
+    -returnWithError(err: string): void
+  }
+
+  class "config.php" as Config <<PHP config>> {
+    DB_HOST = "localhost" {readOnly}
+    DB_USER = "TheBeast" {readOnly}
+    DB_PASS {readOnly}
+    DB_NAME = "COP4331" {readOnly}
+  }
+
+  package "JSON request/response bodies" {
+    class LoginRequest <<JSON>> {
+      login: string
+      password: string
+    }
+    class LoginResponse <<JSON>> {
+      id: int
+      firstName: string
+      lastName: string
+      error: string
+    }
+    class SearchColorsRequest <<JSON>> {
+      search: string
+      userId: int
+    }
+    class SearchColorsResponse <<JSON>> {
+      results: string[0..*]
+      error: string
+    }
+    class AddColorRequest <<JSON>> {
+      color: string
+      userId: int
+    }
+    class AddColorResponse <<JSON>> {
+      error: string
+    }
+
+    note bottom of SearchColorsResponse
+      results is left out when nothing matches.
+      In that case returnWithError() sends
+      {id: 0, firstName: ~"~", lastName: ~"~", error}
+      (same shape as Login's error).
+    end note
+  }
+}
+
+package "MySQL database COP4331 (database/schema.sql)" {
+  class Users <<table>> {
+    ID: INT {PK, AUTO_INCREMENT}
+    {field} FirstName: VARCHAR(50)
+    {field} LastName: VARCHAR(50)
+    {field} Login: VARCHAR(50)
+    {field} Password: VARCHAR(50)
+  }
+
+  class Colors <<table>> {
+    ID: INT {PK, AUTO_INCREMENT}
+    {field} Name: VARCHAR(50)
+    UserID: INT
+  }
+
+  class Contacts <<table>> {
+    ID: INT {PK, AUTO_INCREMENT}
+    {field} FirstName: VARCHAR(50)
+    {field} LastName: VARCHAR(50)
+    {field} Phone: VARCHAR(50)
+    {field} Email: VARCHAR(50)
+    UserID: INT
+  }
+
+  note bottom of Colors
+    UserID holds a Users.ID, but schema.sql
+    has no FOREIGN KEY constraint.
+  end note
+
+  note bottom of Contacts
+    Not used by the COLORS app.
+  end note
+}
+
+' front end
+IndexPage ..> CodeJS : <<script>>
+IndexPage ..> MD5 : <<script>>
+ColorPage ..> CodeJS : <<script>>
+CodeJS ..> Cookie : saves / reads / clears
+
+' front end -> API
+CodeJS ..> LoginPHP : POST\n(doLogin)
+CodeJS ..> SearchPHP : POST\n(searchColor)
+CodeJS ..> AddPHP : POST\n(addColor)
+
+' API -> JSON bodies
+LoginPHP ..> LoginRequest
+LoginPHP ..> LoginResponse
+SearchPHP ..> SearchColorsRequest
+SearchPHP ..> SearchColorsResponse
+AddPHP ..> AddColorRequest
+AddPHP ..> AddColorResponse
+
+' API -> config and tables
+LoginPHP ..> Config : <<require_once>>
+SearchPHP ..> Config : <<require_once>>
+AddPHP ..> Config : <<require_once>>
+LoginPHP ..> Users : SELECT
+SearchPHP ..> Colors : SELECT ... LIKE
+AddPHP ..> Colors : INSERT
+
+' tables (UserID is a plain INT column, no FOREIGN KEY)
+Users "1" -- "0..*" Colors : owns >
+Users "1" -- "0..*" Contacts : owns >
+
+@enduml
