@@ -31,14 +31,20 @@ The database is called COP4331 and has three tables: Users, Colors, and Contacts
 - PHP with mysqli
 - Plain HTML, CSS, and JavaScript on the front end, no frameworks
 - md5.js (JavaScript-MD5 by Sebastian Tschan, MIT license), which came with the lab files
+- GitHub Actions with HTMLHint, Stylelint, and ESLint for linting (Node.js is only used to run the linters, see [Linting and CI](#linting-and-ci))
 
 ## Repo structure
 
 ```
+.github/      workflows/lint.yml (the GitHub Actions lint workflow)
 api/          the 3 PHP endpoints, plus config.sample.php
 database/     schema.sql (creates the database, tables, sample data, and DB user)
 public/       index.html, color.html, css/, js/, images/
 .gitignore
+.htmlhintrc           HTMLHint rules
+eslint.config.mjs     ESLint config
+stylelint.config.mjs  Stylelint config
+package.json          the lint tools and npm scripts (package-lock.json pins their versions)
 LICENSE.md
 README.md
 ```
@@ -112,6 +118,32 @@ You can also call the API directly with curl or Postman. For example, on a serve
 curl -X POST http://<your-server>/LAMPAPI/Login.php -H "Content-Type: application/json" -d '{"login":"RickL","password":"COP4331"}'
 ```
 
+## Linting and CI
+
+Every push and pull request runs a GitHub Actions workflow ([.github/workflows/lint.yml](.github/workflows/lint.yml)) that lints the front end. It has one job per linter, and all three have to pass:
+
+- **HTML**: HTMLHint with the rules in `.htmlhintrc`. It checks for the doctype, a `lang` attribute, charset and viewport meta tags, paired tags, unique IDs, `type` on buttons, and tab indentation, among other things.
+- **CSS**: Stylelint with `stylelint-config-standard`, set up in `stylelint.config.mjs`. The only change from the standard config is that IDs can be camelCase, since the HTML and code.js use those same names.
+- **JavaScript**: ESLint's recommended rules plus `eqeqeq`, `no-var`, and `prefer-const`, set up in `eslint.config.mjs`. md5.js is skipped because it's a third-party library and I'm keeping it exactly as published.
+
+Node.js is only used to install and run the linters. The app still has no build step and runs on the LAMP server the same way as before. package.json, the lint configs, and node_modules don't get copied to the server.
+
+To run the same checks locally (needs Node 20.19 or newer):
+
+```
+npm ci
+npm run lint
+```
+
+Or run one at a time with `npm run lint:html`, `npm run lint:css`, or `npm run lint:js`.
+
+Getting everything to pass changed a few things in the front end:
+
+- Both pages now start with `<!DOCTYPE html>` and have `lang="en"`, a charset, and a viewport tag. Without a doctype the browser was rendering in quirks mode, so the layout shifts a little: the text boxes are slightly wider and the Log Out button sits a bit lower.
+- ESLint found a duplicate key in addColor (`{color:newColor,userId,userId}`). It's now `{color:newColor,userId:userId}`, which sends the same request body as before.
+- code.js uses `===` instead of `==`, `let` instead of `var`, and `const` for variables that never change.
+- styles.css changes are cosmetic: `#FFF` instead of `#FFFFFF`, `opacity: 0.5` instead of `50%`, and no quotes around the Ubuntu font name.
+
 ## Assumptions
 
 - The server is a DigitalOcean LAMP droplet or something close to it (Ubuntu, Apache, MySQL 8, PHP).
@@ -143,6 +175,15 @@ I built and deployed the app itself during the lab sessions. The PHP endpoints, 
 - **Use**: Code generation and refactoring for the credentials change. It wrote config.sample.php, added a `require_once` of config.php to each of the three PHP files, and changed their `new mysqli(...)` lines to use the `DB_` constants. Those are the only lines it changed in the endpoints. Writing help for the first draft of this README and the comments in schema.sql. Review of the finished repo for leftover passwords, junk files, and missing README sections, and testing the live site with curl after I deployed.
 
 I deployed the updated PHP files to my server myself and ran php -l on them. config.sample.php has a comment at the top marking it as AI-assisted.
+
+I used the same tool again for the CI linting assignment:
+
+- **Tool**: Claude Code, using the Claude Opus 5.5 model
+- **Date**: November 4, 2026
+- **Scope**: Setting up the GitHub Actions lint workflow and the HTMLHint, Stylelint, and ESLint configs, fixing the lint errors in index.html, color.html, styles.css, and code.js, and writing the Linting and CI section of this README.
+- **Use**: Code generation for lint.yml, package.json, and the three lint configs. Fixes for the lint errors listed in [Linting and CI](#linting-and-ci). Most of the CSS and JavaScript fixes came from Stylelint's and ESLint's own `--fix` option, and the doctype and meta tags, the `===` changes, and the duplicate `userId` key were edited directly. It compared screenshots of both pages before and after the HTML changes to check the layout, and checked each GitHub Actions run until all three lint jobs passed.
+
+lint.yml, eslint.config.mjs, and stylelint.config.mjs have a comment at the top marking them as AI-assisted (.htmlhintrc and package.json are JSON, which doesn't allow comments).
 
 ## License
 

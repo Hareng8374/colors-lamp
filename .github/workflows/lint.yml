@@ -1,3 +1,4 @@
+# AI-assisted: written with Claude Code to lint the front end on every push and pull request.
 name: Lint
 
 # Runs on every push (any branch) and every pull request.

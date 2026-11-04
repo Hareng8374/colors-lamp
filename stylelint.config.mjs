@@ -1,3 +1,4 @@
+// AI-assisted: written with Claude Code for the CI linting assignment.
 /** @type {import("stylelint").Config} */
 export default {
   extends: ["stylelint-config-standard"],

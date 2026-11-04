@@ -1,3 +1,4 @@
+// AI-assisted: written with Claude Code for the CI linting assignment.
 import js from "@eslint/js";
 import globals from "globals";
 import { defineConfig, globalIgnores } from "eslint/config";
