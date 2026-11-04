@@ -1,6 +1,9 @@
 # Real database credentials. Copy api/config.sample.php to api/config.php.
 config.php
 
+# Lint tools installed by npm (Node is only used for linting)
+node_modules/
+
 # OS and editor files
 .DS_Store
 __MACOSX/

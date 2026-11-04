@@ -1,0 +1,42 @@
+name: Lint
+
+# Runs on every push (any branch) and every pull request.
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      # Let all three linters finish so one failure doesn't hide the others.
+      fail-fast: false
+      matrix:
+        include:
+          - name: HTML (HTMLHint)
+            script: lint:html
+          - name: CSS (Stylelint)
+            script: lint:css
+          - name: JavaScript (ESLint)
+            script: lint:js
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+
+      # Node is only used to install and run the linters, not the app.
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install lint tools
+        run: npm ci
+
+      - name: Run ${{ matrix.name }}
+        run: npm run ${{ matrix.script }}
