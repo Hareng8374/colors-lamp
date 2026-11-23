@@ -31,20 +31,21 @@ The database is called COP4331 and has three tables: Users, Colors, and Contacts
 - PHP with mysqli
 - Plain HTML, CSS, and JavaScript on the front end, no frameworks
 - md5.js (JavaScript-MD5 by Sebastian Tschan, MIT license), which came with the lab files
-- GitHub Actions with HTMLHint, Stylelint, and ESLint for linting (Node.js is only used to run the linters, see [Linting and CI](#linting-and-ci))
+- GitHub Actions with HTMLHint, Stylelint, and ESLint for linting and Jest for tests (Node.js is only used to run the linters and tests, see [Linting, testing, and CI](#linting-testing-and-ci))
 
 ## Repo structure
 
 ```
-.github/      workflows/lint.yml (the GitHub Actions lint workflow)
+.github/      workflows/ci.yml (the GitHub Actions workflow: lint, unit tests, integration tests)
 api/          the 3 PHP endpoints, plus config.sample.php
 database/     schema.sql (creates the database, tables, sample data, and DB user)
-public/       index.html, color.html, css/, js/, images/
+public/       index.html, color.html, css/, js/ (code.js, helpers.js, md5.js), images/
+tests/        unit/ (front end helpers) and integration/ (PHP API) Jest tests
 .gitignore
 .htmlhintrc           HTMLHint rules
 eslint.config.mjs     ESLint config
 stylelint.config.mjs  Stylelint config
-package.json          the lint tools and npm scripts (package-lock.json pins their versions)
+package.json          the lint and test tools and npm scripts (package-lock.json pins their versions)
 LICENSE.md
 README.md
 ```
@@ -118,15 +119,23 @@ You can also call the API directly with curl or Postman. For example, on a serve
 curl -X POST http://<your-server>/LAMPAPI/Login.php -H "Content-Type: application/json" -d '{"login":"RickL","password":"COP4331"}'
 ```
 
-## Linting and CI
+## Linting, testing, and CI
 
-Every push and pull request runs a GitHub Actions workflow ([.github/workflows/lint.yml](.github/workflows/lint.yml)) that lints the front end. It has one job per linter, and all three have to pass:
+Every push and pull request runs a GitHub Actions workflow ([.github/workflows/ci.yml](.github/workflows/ci.yml)) with five jobs, and all of them have to pass:
+
+- Lint HTML, Lint CSS, and Lint JavaScript (one job per linter, see [Linting](#linting))
+- Unit tests (Jest), which test the front end logic (see [Tests](#tests))
+- Integration tests (PHP API + MySQL), which test the API endpoints against a real database (see [Tests](#tests))
+
+Node.js is only used to install and run the linters and tests. The app still has no build step and runs on the LAMP server the same way as before. package.json, the lint and test configs, tests/, and node_modules don't get copied to the server.
+
+### Linting
+
+The workflow has one lint job per linter:
 
 - **HTML**: HTMLHint with the rules in `.htmlhintrc`. It checks for the doctype, a `lang` attribute, charset and viewport meta tags, paired tags, unique IDs, `type` on buttons, and tab indentation, among other things.
 - **CSS**: Stylelint with `stylelint-config-standard`, set up in `stylelint.config.mjs`. The only change from the standard config is that IDs can be camelCase, since the HTML and code.js use those same names.
-- **JavaScript**: ESLint's recommended rules plus `eqeqeq`, `no-var`, and `prefer-const`, set up in `eslint.config.mjs`. md5.js is skipped because it's a third-party library and I'm keeping it exactly as published.
-
-Node.js is only used to install and run the linters. The app still has no build step and runs on the LAMP server the same way as before. package.json, the lint configs, and node_modules don't get copied to the server.
+- **JavaScript**: ESLint's recommended rules plus `eqeqeq`, `no-var`, and `prefer-const`, set up in `eslint.config.mjs`. md5.js is skipped because it's a third-party library and I'm keeping it exactly as published. The test files in tests/ are linted too, as Node code with Jest's globals.
 
 To run the same checks locally (needs Node 20.19 or newer):
 
@@ -144,6 +153,36 @@ Getting everything to pass changed a few things in the front end:
 - code.js uses `===` instead of `==`, `let` instead of `var`, and `const` for variables that never change.
 - styles.css changes are cosmetic: `#FFF` instead of `#FFFFFF`, `opacity: 0.5` instead of `50%`, and no quotes around the Ubuntu font name.
 
+### Tests
+
+The tests use Jest and are in the tests/ folder.
+
+**Unit tests** ([tests/unit/helpers.test.js](tests/unit/helpers.test.js)) cover the front end logic in public/js/helpers.js. I moved the color list formatting out of searchColor into that file and added input checks for the two forms, so they can be tested without a browser or a server:
+
+- `validateLogin` makes sure the username and password are filled in and fit in the 50 character columns in the Users table.
+- `normalizeColorName` trims a new color name and collapses extra spaces. `validateColorName` rejects names that are empty, longer than 50 characters, or have a `"` or `\` in them.
+- `formatColorList` turns the search results into the HTML for the list. It escapes the names, since they're shown with innerHTML, and returns an empty list when the API sends no `results`.
+
+code.js calls these before it sends a request, and both pages load helpers.js before code.js.
+
+**Integration tests** ([tests/integration/api.test.js](tests/integration/api.test.js)) send real POST requests to Login.php, SearchColors.php, and AddColor.php and check the status code, the `Content-Type`, and the JSON that comes back:
+
+- Login.php returns the right `id`, `firstName`, `lastName`, and an empty `error` for a good login, and `id` 0 with `"No Records Found"` for a bad one.
+- SearchColors.php returns a `results` array of strings that all match the search, only returns the user's own colors, and returns `"error":"No Records Found"` with no `results` when nothing matches.
+- A color added with AddColor.php (which returns `{"error":""}`) shows up when you search for it.
+
+They use the sample users and colors from schema.sql. In GitHub Actions, the integration job starts a MySQL 8.0 service container, loads database/schema.sql into it, makes api/config.php from config.sample.php, and serves api/ with PHP's built-in web server (`php -S`). So the requests are answered by the same PHP files that run under Apache on the droplet, and Node only runs Jest.
+
+To run the tests locally:
+
+```
+npm ci
+npm run test:unit
+API_URL=http://<your-server>/LAMPAPI npm run test:integration
+```
+
+`npm test` runs just the unit tests. The integration tests need a copy of the API set up with schema.sql (they log in as RickL and add a test color for SamH), so don't point them at a server with real data. API_URL defaults to http://127.0.0.1:8000, which is what `php -S 127.0.0.1:8000 -t api` gives you if you have PHP and MySQL installed locally.
+
 ## Assumptions
 
 - The server is a DigitalOcean LAMP droplet or something close to it (Ubuntu, Apache, MySQL 8, PHP).
@@ -160,8 +199,8 @@ This is the lab code mostly as we built it, so there are some problems I left al
 - It runs on plain HTTP, not HTTPS, so passwords are sent unencrypted.
 - The API trusts whatever userId the browser sends. There's no session on the server, so someone could send a different userId and see or add another user's colors.
 - urlBase in code.js is hardcoded to my server's IP, so it has to be changed for any other server.
-- If a search finds nothing, the API sends back an error with no `results` array and code.js doesn't handle that. The list just doesn't update and there's a JavaScript error in the console.
-- The PHP builds its JSON responses by gluing strings together instead of using json_encode, so a color name with a `"` in it breaks the response.
+- If a search finds nothing, the API sends back an error with no `results` array instead of an empty one. code.js now handles that (it shows "No Records Found" and clears the list), but anything else calling the API has to check for it.
+- The PHP builds its JSON responses by gluing strings together instead of using json_encode, so a color name with a `"` in it breaks the response. The add color form now blocks `"` and `\`, but the API itself still accepts them.
 - You can't sign up, and you can't edit or delete colors.
 - The database user from the lab handout has all privileges on COP4331 and can connect from any host.
 
