@@ -27,4 +27,47 @@ export default defineConfig([
       "prefer-const": "error",
     },
   },
+
+  {
+    // Defined in helpers.js, which both pages load before code.js.
+    files: ["public/js/code.js"],
+    languageOptions: {
+      globals: {
+        validateLogin: "readonly",
+        normalizeColorName: "readonly",
+        validateColorName: "readonly",
+        formatColorList: "readonly",
+      },
+    },
+  },
+
+  {
+    // helpers.js checks for `module` so Jest can require() it.
+    files: ["public/js/helpers.js"],
+    languageOptions: {
+      globals: {
+        module: "readonly",
+      },
+    },
+  },
+
+  {
+    // Jest test files run in Node, not the browser.
+    files: ["tests/**/*.js"],
+    plugins: { js },
+    extends: ["js/recommended"],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: "commonjs",
+      globals: {
+        ...globals.node,
+        ...globals.jest,
+      },
+    },
+    rules: {
+      eqeqeq: "error",
+      "no-var": "error",
+      "prefer-const": "error",
+    },
+  },
 ]);

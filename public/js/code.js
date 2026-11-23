@@ -1,5 +1,7 @@
 /* exported doLogin, readCookie, doLogout, addColor, searchColor */
 // These are called from onclick attributes and inline scripts in the HTML pages.
+// validateLogin, normalizeColorName, validateColorName, and formatColorList come
+// from helpers.js, which the pages load before this file.
 
 const urlBase = 'http://167.99.3.98/LAMPAPI';
 const extension = 'php';
@@ -19,6 +21,13 @@ function doLogin()
 //	var hash = md5( password );
 	
 	document.getElementById("loginResult").innerHTML = "";
+
+	const inputError = validateLogin( login, password );
+	if( inputError !== "" )
+	{
+		document.getElementById("loginResult").innerHTML = inputError;
+		return;
+	}
 
 	const tmp = {login:login,password:password};
 //	var tmp = {login:login,password:hash};
@@ -113,8 +122,15 @@ function doLogout()
 
 function addColor()
 {
-	const newColor = document.getElementById("colorText").value;
+	const newColor = normalizeColorName( document.getElementById("colorText").value );
 	document.getElementById("colorAddResult").innerHTML = "";
+
+	const inputError = validateColorName( newColor );
+	if( inputError !== "" )
+	{
+		document.getElementById("colorAddResult").innerHTML = inputError;
+		return;
+	}
 
 	const tmp = {color:newColor,userId:userId};
 	const jsonPayload = JSON.stringify( tmp );
@@ -146,8 +162,6 @@ function searchColor()
 {
 	const srch = document.getElementById("searchText").value;
 	document.getElementById("colorSearchResult").innerHTML = "";
-	
-	let colorList = "";
 
 	const tmp = {search:srch,userId:userId};
 	const jsonPayload = JSON.stringify( tmp );
@@ -163,19 +177,19 @@ function searchColor()
 		{
 			if (this.readyState === 4 && this.status === 200) 
 			{
-				document.getElementById("colorSearchResult").innerHTML = "Color(s) has been retrieved";
 				const jsonObject = JSON.parse( xhr.responseText );
-				
-				for( let i=0; i<jsonObject.results.length; i++ )
+
+				// When nothing matches, the API sends {"error":"No Records Found"} with no results array.
+				if( jsonObject.error )
 				{
-					colorList += jsonObject.results[i];
-					if( i < jsonObject.results.length - 1 )
-					{
-						colorList += "<br />\r\n";
-					}
+					document.getElementById("colorSearchResult").innerHTML = jsonObject.error;
 				}
-				
-				document.getElementsByTagName("p")[0].innerHTML = colorList;
+				else
+				{
+					document.getElementById("colorSearchResult").innerHTML = "Color(s) has been retrieved";
+				}
+
+				document.getElementsByTagName("p")[0].innerHTML = formatColorList( jsonObject.results );
 			}
 		};
 		xhr.send(jsonPayload);
