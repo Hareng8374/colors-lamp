@@ -1,0 +1,130 @@
+name: CI
+
+# Runs on every push (any branch) and every pull request.
+# Lint, unit tests, and integration tests run as separate jobs, and all of them have to pass.
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      # Let all three linters finish so one failure doesn't hide the others.
+      fail-fast: false
+      matrix:
+        include:
+          - name: HTML (HTMLHint)
+            script: lint:html
+          - name: CSS (Stylelint)
+            script: lint:css
+          - name: JavaScript (ESLint)
+            script: lint:js
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+
+      # Node is only used to install and run the linters and tests, not the app.
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install lint tools
+        run: npm ci
+
+      - name: Run ${{ matrix.name }}
+        run: npm run ${{ matrix.script }}
+
+  unit-tests:
+    name: Unit tests (Jest)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install test tools
+        run: npm ci
+
+      # Tests the front end helpers in public/js/helpers.js. No server needed.
+      - name: Run unit tests
+        run: npm run test:unit
+
+  integration-tests:
+    name: Integration tests (PHP API + MySQL)
+    runs-on: ubuntu-latest
+
+    # A throwaway MySQL server for this job only.
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+    env:
+      # Password for the app's DB user in the CI database only. It isn't used anywhere real.
+      DB_PASS: ci-only-password
+      API_URL: http://127.0.0.1:8000
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: mysqli
+          coverage: none
+
+      # Same file we run on the real server: creates COP4331, the tables, the sample data, and the TheBeast user.
+      - name: Load database/schema.sql
+        run: sed "s/CHANGE_ME/$DB_PASS/" database/schema.sql | mysql -h 127.0.0.1 -P 3306 -u root -proot
+
+      # Built from config.sample.php. MySQL is in a container here, so connect to 127.0.0.1 over TCP instead of localhost.
+      - name: Create api/config.php
+        run: sed -e "s/'localhost'/'127.0.0.1'/" -e "s/CHANGE_ME/$DB_PASS/" api/config.sample.php > api/config.php
+
+      # PHP serves the API, the same PHP files that run under Apache on the droplet. Node never runs the app.
+      - name: Start the API with PHP's built-in web server
+        run: |
+          php -S 127.0.0.1:8000 -t api > php-server.log 2>&1 &
+          curl --silent --output /dev/null --retry 20 --retry-delay 1 --retry-connrefused "$API_URL/"
+          echo "API is up at $API_URL"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install test tools
+        run: npm ci
+
+      # Sends real requests to Login.php, SearchColors.php, and AddColor.php and checks the JSON.
+      - name: Run integration tests
+        run: npm run test:integration
+
+      - name: Show PHP server log
+        if: always()
+        run: cat php-server.log || true
